@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         String    @default("DEVELOPER") // SUPER_ADMIN, ADMIN, DEVELOPER, VIEWER
+  isActive     Boolean   @default(true)
+  apiKey       String?   @unique
+  permissions  String?   // JSON custom permission overrides
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  name        String
+  slug        String        @unique
+  description String?
+  dbType      String        @default("postgresql") // postgresql, sqlite, mysql
+  status      String        @default("active")     // active, paused, archived
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tables      TableSchema[]
+  auditLogs   AuditLog[]
+}
+
+model TableSchema {
+  id          String         @id @default(uuid())
+  projectId   String
+  name        String         // e.g. "users", "products"
+  displayName String?
+  description String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  columns     ColumnSchema[]
+  records     RecordRow[]
+
+  @@unique([projectId, name])
+}
+
+model ColumnSchema {
+  id           String      @id @default(uuid())
+  tableId      String
+  name         String      // e.g. "title", "price", "is_active"
+  displayName  String?
+  type         String      @default("string") // string, number, boolean, datetime, json
+  isRequired   Boolean     @default(false)
+  isUnique     Boolean     @default(false)
+  defaultValue String?
+
+  table        TableSchema @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@unique([tableId, name])
+}
+
+model RecordRow {
+  id        String      @id @default(uuid())
+  tableId   String
+  data      String      // JSON serialized string of row attributes
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  table     TableSchema @relation(fields: [tableId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  projectId String?
+  action    String   // e.g. "PROJECT_CREATE", "TABLE_CREATE", "RECORD_INSERT", "SQL_EXEC"
+  target    String
+  details   String?  // JSON string of before/after or payload
+  ipAddress String?  @default("127.0.0.1")
+  createdAt DateTime @default(now())
+
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model TelemetryEvent {
+  id         String   @id @default(uuid())
+  path       String
+  method     String
+  statusCode Int
+  durationMs Float
+  createdAt  DateTime @default(now())
+}
+
+model AlertConfig {
+  id         String   @id @default("default")
+  telegramBotToken String?
+  telegramChatId   String?
+  discordWebhook   String?
+  isTelegramEnabled Boolean @default(false)
+  isDiscordEnabled  Boolean @default(false)
+  cpuThreshold     Int      @default(85)
+  updatedAt        DateTime @updatedAt
+}
